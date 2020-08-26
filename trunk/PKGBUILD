@@ -1,10 +1,12 @@
 # Maintainer: Anatol Pomozov
 # Contributor: 謝致邦 <Yeking@Red54.com>
 # Contributor: Alucryd <alucryd at gmail dot com>
+# Contributor: Luís Ferreira <luis at aurorafoss dot org>
 
 pkgname=android-tools
 pkgver=30.0.3
-pkgrel=1
+_majorver=${pkgver%%.*}
+pkgrel=2
 _tag=platform-tools-$pkgver
 pkgdesc='Android platform tools'
 arch=(x86_64)
@@ -12,24 +14,26 @@ url='http://tools.android.com/'
 license=(Apache MIT)
 depends=(pcre2 libusb protobuf brotli)
 optdepends=('python: for mkbootimg script'
-            'python2: for unpack_bootimg & avbtool scripts')
+            'python2: for unpack_bootimg & avbtool scripts'
+            'java-runtime>=7: for dx compiler')
 # it depends on 'vim' because of 'xxd' tool.
-makedepends=(git clang gtest ruby cmake ninja go vim)
+makedepends=(git clang gtest ruby cmake ninja go vim bison 'java-environment=7')
 provides=(fastboot adb)
 conflicts=(fastboot adb)
-source=(git+https://android.googlesource.com/platform/frameworks/base#tag=$_tag
-        git+https://android.googlesource.com/platform/frameworks/native#tag=$_tag
-        git+https://android.googlesource.com/platform/system/core#tag=$_tag
-        git+https://android.googlesource.com/platform/system/extras#tag=$_tag
-        git+https://android.googlesource.com/platform/system/libbase#tag=$_tag
-        git+https://android.googlesource.com/platform/system/libziparchive#tag=$_tag
-        git+https://android.googlesource.com/platform/system/tools/mkbootimg#tag=$_tag
-        git+https://android.googlesource.com/platform/external/selinux#tag=$_tag
-        git+https://android.googlesource.com/platform/external/f2fs-tools#tag=$_tag
-        git+https://android.googlesource.com/platform/external/e2fsprogs#tag=$_tag
-        git+https://android.googlesource.com/platform/external/avb#tag=$_tag
-        git+https://android.googlesource.com/platform/external/boringssl#tag=$_tag
-        #git+https://boringssl.googlesource.com/boringssl#commit=$_boringssl_commit
+source=("git+https://android.googlesource.com/platform/frameworks/base#tag=$_tag"
+        "git+https://android.googlesource.com/platform/frameworks/native#tag=$_tag"
+        "git+https://android.googlesource.com/platform/system/core#tag=$_tag"
+        "git+https://android.googlesource.com/platform/system/extras#tag=$_tag"
+        "git+https://android.googlesource.com/platform/system/libbase#tag=$_tag"
+        "git+https://android.googlesource.com/platform/system/libziparchive#tag=$_tag"
+        "git+https://android.googlesource.com/platform/system/tools/mkbootimg#tag=$_tag"
+        "git+https://android.googlesource.com/platform/system/tools/aidl#tag=$_tag"
+        "git+https://android.googlesource.com/platform/external/selinux#tag=$_tag"
+        "git+https://android.googlesource.com/platform/external/f2fs-tools#tag=$_tag"
+        "git+https://android.googlesource.com/platform/external/e2fsprogs#tag=$_tag"
+        "git+https://android.googlesource.com/platform/external/avb#tag=$_tag"
+        "git+https://android.googlesource.com/platform/dalvik#tag=$_tag"
+        "git+https://android.googlesource.com/platform/external/boringssl#tag=$_tag"
         generate_build.rb
 # deployagent.jar is a library built from Android sources.
 # Building this java library requires a lot of dependencies:
@@ -37,17 +41,18 @@ source=(git+https://android.googlesource.com/platform/frameworks/base#tag=$_tag
 # To avoid the complexity we prebuilt the lib from the Android sources directly
 # using following instructions:
 #   (See https://wiki.archlinux.org/index.php/Android for context)
-# 
+#
 #   source build/envsetup.sh
 #   lunch full-eng
 #   mmm system/core/adb/
 #   cp ./target/product/generic/system/framework/deployagent.jar .
         deployagent.jar
+        dx.run
 # we disable mDNS functionality as it does not compile with the Arch system version of the library
         fix_build_core.patch
         fix_libziparchive.patch
-        boringssl-disable-thirdpartydeps.patch
-        bash_completion.fastboot)
+        fix_aidl_bison.patch
+        boringssl-disable-thirdpartydeps.patch)
         # Bash completion file was taken from https://github.com/mbrubeck/android-completion
 sha1sums=('SKIP'
           'SKIP'
@@ -61,42 +66,77 @@ sha1sums=('SKIP'
           'SKIP'
           'SKIP'
           'SKIP'
-          '8c95ce0bbc39bf1fe37213497af924ad10f195b4'
+          'SKIP'
+          'SKIP'
+          'c62c0588dd95d34fccfc3d52ece4a8e2682c3bbe'
           'd9dfac30245faa0a96968b96f3acd9ad536f4910'
+          '13ba96699054dad0a8ba32e42133036ec9f38401'
           '61b1bcf230be39a5f9544e82d43269a20bfb9ef2'
           'ce8314d6b1e05e3f4f7ae7828d225fbb07a2a55c'
-          '1c025855a3e7ea351685843a0df45c52a7e674dd'
-          '7004dbd0c193668827174880de6f8434de8ceaee')
+          'aa90d90d5d8ff60718e75554195ccaebecdba6f0'
+          '1c025855a3e7ea351685843a0df45c52a7e674dd')
 
 prepare() {
-  cd "$srcdir"/core
+  cd "$srcdir"
+  mkdir -p tools
+  mv mkbootimg tools
+  mv aidl tools
+
+  cd "$srcdir/core"
   patch -p1 < ../fix_build_core.patch
 
-  cd "$srcdir"/libziparchive
+  cd "$srcdir/libziparchive"
   patch -p1 < ../fix_libziparchive.patch
 
-  cd "$srcdir"/avb
+  cd "$srcdir/tools/aidl"
+  patch -p1 < ../../fix_aidl_bison.patch
+
+  cd "$srcdir/avb"
   sed -i 's|/usr/bin/env python$|/usr/bin/env python2|g' avbtool
 
-  cd "$srcdir"/mkbootimg
+  cd "$srcdir/tools/mkbootimg"
   sed -i 's|/usr/bin/env python$|/usr/bin/env python2|g' unpack_bootimg.py
 
-  cd "$srcdir"/boringssl
+  cd "$srcdir/boringssl"
   patch -p1 < ../boringssl-disable-thirdpartydeps.patch
   mkdir -p "$srcdir"/boringssl/src/build
 }
 
 build() {
+  # dx
+  cd "$srcdir/dalvik/dx"
+  mkdir .builddir/
+  javac -verbose -d .builddir -g:none -Xlint:unchecked @<(find src/ -name "*.java")
+  (cd ".builddir/"; jar cmvf ../etc/manifest.txt ../dx.jar ./*)
+
+  # boringssl
   (cd "$srcdir"/boringssl/src/build && cmake -GNinja ..; ninja crypto/libcrypto.a ssl/libssl.a)
 
-  PLATFORM_TOOLS_VERSION="$pkgver-$pkgrel" ./generate_build.rb > build.ninja
+  # other packages
+  cd "$srcdir/"
+  export PLATFORM_TOOLS_VERSION="$pkgver-$pkgrel"
+  export PLATFORM_SDK_VERSION="$_majorver"
+  ./generate_build.rb > build.ninja
+
   ninja
 }
 
 package() {
-  install -m755 -d "$pkgdir"/usr/bin
-  install -m755 -t "$pkgdir"/usr/bin fastboot adb mke2fs.android e2fsdroid ext2simg avb/avbtool
-  install -Dm 755 mkbootimg/mkbootimg.py "$pkgdir"/usr/bin/mkbootimg
-  install -Dm 755 mkbootimg/unpack_bootimg.py "$pkgdir"/usr/bin/unpack_bootimg
-  install -Dm 644 bash_completion.fastboot "$pkgdir"/usr/share/bash-completion/completions/fastboot
+  cd "$srcdir"
+
+  # Binaries
+  install -m755 -d "$pkgdir/usr/bin"
+  install -m755 -t "$pkgdir/usr/bin" \
+    fastboot adb mke2fs.android e2fsdroid ext2simg avb/avbtool aidl
+  install -Dm 755 tools/mkbootimg/mkbootimg.py "$pkgdir"/usr/bin/mkbootimg
+  install -Dm 755 tools/mkbootimg/unpack_bootimg.py "$pkgdir"/usr/bin/unpack_bootimg
+  install -Dm 755 dalvik/dx/dx.jar "$pkgdir/usr/share/java/$pkgname/dx.jar"
+  install -m 755 -D dx.run "$pkgdir/usr/bin/dx"
+
+  # Bash completion
+  install -Dm 644 core/fastboot/fastboot.bash "$pkgdir"/usr/share/bash-completion/completions/fastboot
+  install -Dm 644 core/adb/adb.bash "$pkgdir"/usr/share/bash-completion/completions/adb
+
+  # License
+  install -Dm644 core/NOTICE "$pkgdir"/usr/share/licenses/$pkgname/LICENSE
 }
