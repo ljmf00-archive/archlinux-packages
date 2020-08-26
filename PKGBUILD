@@ -3,13 +3,13 @@
 _gemname=fpm
 pkgname=$_gemname
 pkgver=1.11.0
-pkgrel=1
+pkgrel=2
 pkgdesc='Effing package management! Build packages for multiple platforms (deb, rpm, etc) with great ease and sanity.'
 arch=(any)
 url="https://github.com/jordansissel/${_gemname}"
 license=('MIT')
 depends=(ruby
-         ruby-json-1
+         ruby-json
          ruby-cabin
          ruby-backports
          ruby-arr-pm
@@ -26,16 +26,16 @@ source=("https://github.com/jordansissel/fpm/archive/v${pkgver}.tar.gz")
 sha256sums=('db9474ad6e3f119e4fb6cf32de34e982cda3950f6d930c29d4950af2875ffa07')
 
 build() {
-  cd $srcdir/$_gemname-$pkgver
+  cd "$srcdir/$_gemname-$pkgver"
   sed -i 's/"clamp", "~> 1.0.0"/"clamp", ">= 1.0.0"/' fpm.gemspec
   sed -i 's/"childprocess", "0.9.0"/"childprocess", "< 1.0.0"/' fpm.gemspec
   make gem
 }
 
-# check() {
-#   cd $srcdir/$_gemname-$pkgver
-#   make test
-# }
+check() {
+  cd "$srcdir/$_gemname-$pkgver"
+  make test
+}
 
 package() {
   local _gemdir="$(ruby -e'puts Gem.default_dir')"
